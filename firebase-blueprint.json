@@ -1,0 +1,116 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user registered in Finglass, belonging to a household.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique user authentication ID." },
+        "email": { "type": "string", "description": "User email address." },
+        "displayName": { "type": "string", "description": "Display name of the user." },
+        "householdId": { "type": "string", "description": "The household this user belongs to." },
+        "photoURL": { "type": "string", "description": "Avatar photo URL" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "householdId"]
+    },
+    "Household": {
+      "title": "Household",
+      "description": "Represents a shared family household group.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Household unique ID." },
+        "name": { "type": "string", "description": "Name of the family or household." },
+        "members": { "type": "array", "description": "Array of user UIDs currently in the household." },
+        "invitedEmails": { "type": "array", "description": "Emails of users invited to join this household." },
+        "baseCurrency": { "type": "string", "description": "Base currency code, e.g. USD." },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "members"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Everyday tracker entries: earnings, expenses, bills, or subscription records.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "householdId": { "type": "string" },
+        "userId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "memberName": { "type": "string", "description": "Which family member this transaction applies to, or 'Household'." },
+        "type": { "type": "string", "enum": ["earning", "expense"] },
+        "category": { "type": "string" },
+        "amount": { "type": "number", "description": "Amount converted to USD." },
+        "originalAmount": { "type": "number" },
+        "originalCurrency": { "type": "string" },
+        "date": { "type": "string", "description": "ISO date string YYYY-MM-DD" },
+        "description": { "type": "string" },
+        "isBill": { "type": "boolean" },
+        "isSubscription": { "type": "boolean" },
+        "dueDate": { "type": "string", "description": "Due date for future bill payments or subscription cycle." },
+        "status": { "type": "string", "enum": ["paid", "unpaid", "active", "cancelled", "overdue"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "householdId", "userId", "type", "category", "amount", "originalAmount", "originalCurrency", "date", "description"]
+    },
+    "Goal": {
+      "title": "Goal",
+      "description": "Financial goals for buying houses, retirement, trips, or big custom expenses.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "householdId": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string", "enum": ["trip", "house", "retirement", "savings", "other"] },
+        "targetAmount": { "type": "number", "description": "Target savings amount in USD." },
+        "currentAmount": { "type": "number", "description": "Current savings amount in USD." },
+        "targetDate": { "type": "string", "description": "ISO Date YYYY-MM-DD" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "householdId", "userId", "title", "category", "targetAmount", "currentAmount", "targetDate"]
+    },
+    "Investment": {
+      "title": "Investment",
+      "description": "Track growth and forecast compound investment models.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "householdId": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string", "enum": ["stocks", "crypto", "real_estate", "savings_account", "retirement", "other"] },
+        "principal": { "type": "number", "description": "Principal investment value in USD." },
+        "yieldRate": { "type": "number", "description": "Expected annual compound growth multiplier percentage, e.g. 7 for 7%." },
+        "contribution": { "type": "number", "description": "Monthly recurring contribution in USD." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "householdId", "userId", "name", "category", "principal", "yieldRate", "contribution"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Stores individual user records and settings, including assigned household ID."
+    },
+    "/households/{householdId}": {
+      "schema": "Household",
+      "description": "Stores household configurations, authorized member lists, and global currency presets."
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Everyday transactions (earnings and expenses), filtered securely by household identifier."
+    },
+    "/goals/{goalId}": {
+      "schema": "Goal",
+      "description": "Household financial goals, suggestions, target tracking values, and timelines."
+    },
+    "/investments/{investmentId}": {
+      "schema": "Investment",
+      "description": "Family and individual investment portfolios and yield forecasting metrics."
+    }
+  }
+}

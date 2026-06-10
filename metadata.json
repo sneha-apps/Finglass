@@ -1,0 +1,6 @@
+{
+  "name": "Finglass",
+  "description": "A minimalist, highly transparent shared family finance portal providing a clear, real-time pane of glass into everyday tracker, goals, investments, and taxes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

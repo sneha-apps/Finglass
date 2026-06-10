@@ -1,0 +1,198 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Pillar 1: Global default-deny catch-all safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitive Definitions & Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Defensively check that email is verified or user logged in via trusted Google provider
+    function isEmailVerified() {
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        request.auth.token.firebase.sign_in_provider == 'google.com'
+      );
+    }
+
+    // Pillar 3: Path Variable & ID Poisoning Guards
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Cost-optimized, secure lookup for the user's active householdId
+    function userHouseholdId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId;
+    }
+
+    // ----------------------------------------------------
+    // Validation Blueprints (Pillar 2 - Anti-Update-Gaps)
+    // ----------------------------------------------------
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'householdId', 'photoURL', 'createdAt'])
+        && data.keys().size() == 6
+        && data.uid == request.auth.uid
+        && data.email == request.auth.token.email
+        && data.displayName is string && data.displayName.size() <= 100
+        && data.householdId is string && data.householdId.size() <= 128
+        && (data.photoURL is string && data.photoURL.size() <= 2000)
+        && data.createdAt is string;
+    }
+
+    function isValidHousehold(data) {
+      return data.keys().hasAll(['id', 'name', 'members', 'invitedEmails', 'baseCurrency', 'createdAt'])
+        && data.keys().size() == 6
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 100
+        && data.members is list && data.members.size() <= 15
+        && data.invitedEmails is list && data.invitedEmails.size() <= 30
+        && data.baseCurrency is string && data.baseCurrency.size() == 3
+        && data.createdAt is string;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll([
+        'id', 'householdId', 'userId', 'creatorName', 'memberName', 
+        'type', 'category', 'amount', 'originalAmount', 'originalCurrency', 
+        'date', 'description', 'isBill', 'isSubscription', 'dueDate', 
+        'status', 'createdAt', 'updatedAt'
+      ])
+        && data.keys().size() == 17
+        && data.id is string && data.id.size() <= 128
+        && data.householdId is string && data.householdId.size() <= 128
+        && data.userId == request.auth.uid
+        && data.creatorName is string && data.creatorName.size() <= 100
+        && data.memberName is string && data.memberName.size() <= 100
+        && (data.type == 'earning' || data.type == 'expense')
+        && data.category is string && data.category.size() <= 50
+        && data.amount is number && data.amount >= 0 && data.amount <= 1000000000
+        && data.originalAmount is number && data.originalAmount >= 0 && data.originalAmount <= 1000000000
+        && data.originalCurrency is string && data.originalCurrency.size() <= 3
+        && data.date is string && data.date.size() == 10
+        && data.description is string && data.description.size() <= 500
+        && data.isBill is bool
+        && data.isSubscription is bool
+        && data.dueDate is string && data.dueDate.size() <= 10
+        && (data.status == 'paid' || data.status == 'unpaid' || data.status == 'active' || data.status == 'cancelled' || data.status == 'overdue')
+        // Timestamps handled as strings to match app state schema perfectly
+        && data.createdAt is string
+        && data.updatedAt is string;
+    }
+
+    function isValidGoal(data) {
+      return data.keys().hasAll([
+        'id', 'householdId', 'userId', 'title', 'category', 
+        'targetAmount', 'currentAmount', 'targetDate', 'createdAt', 'updatedAt'
+      ])
+        && data.keys().size() == 10
+        && data.id is string && data.id.size() <= 128
+        && data.householdId is string && data.householdId.size() <= 128
+        && data.userId == request.auth.uid
+        && data.title is string && data.title.size() <= 100
+        && (data.category == 'trip' || data.category == 'house' || data.category == 'retirement' || data.category == 'savings' || data.category == 'other')
+        && data.targetAmount is number && data.targetAmount >= 0 && data.targetAmount <= 1000000000
+        && data.currentAmount is number && data.currentAmount >= 0 && data.currentAmount <= 1000000000
+        && data.targetDate is string && data.targetDate.size() == 10
+        && data.createdAt is string
+        && data.updatedAt is string;
+    }
+
+    function isValidInvestment(data) {
+      return data.keys().hasAll([
+        'id', 'householdId', 'userId', 'name', 'category', 
+        'principal', 'yieldRate', 'contribution', 'createdAt', 'updatedAt'
+      ])
+        && data.keys().size() == 10
+        && data.id is string && data.id.size() <= 128
+        && data.householdId is string && data.householdId.size() <= 128
+        && data.userId == request.auth.uid
+        && data.name is string && data.name.size() <= 100
+        && (data.category == 'stocks' || data.category == 'crypto' || data.category == 'real_estate' || data.category == 'savings_account' || data.category == 'retirement' || data.category == 'other')
+        && data.principal is number && data.principal >= 0 && data.principal <= 1000000000
+        && data.yieldRate is number && data.yieldRate >= -100 && data.yieldRate <= 10000
+        && data.contribution is number && data.contribution >= 0 && data.contribution <= 1000000000
+        && data.createdAt is string
+        && data.updatedAt is string;
+    }
+
+    // ----------------------------------------------------
+    // Collection Rules & Access Points
+    // ----------------------------------------------------
+
+    // USERS collection: isolated profile PII with household visibility matches
+    match /users/{userId} {
+      allow get: if isEmailVerified() && (userId == request.auth.uid || userHouseholdId() == resource.data.householdId);
+      allow list: if isEmailVerified() && userHouseholdId() == resource.data.householdId;
+      allow create: if isEmailVerified() && isValidId(userId) && userId == request.auth.uid && isValidUser(incoming());
+      allow update: if isEmailVerified() && isValidId(userId) && userId == request.auth.uid && isValidUser(incoming())
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    // HOUSEHOLDS collection: handles multi-member group shares
+    match /households/{householdId} {
+      allow get: if isEmailVerified() && (
+        existing().members.hasAny([request.auth.uid]) || 
+        existing().invitedEmails.hasAny([request.auth.token.email])
+      );
+      allow create: if isEmailVerified() && isValidId(householdId) && isValidHousehold(incoming()) && incoming().members.hasAny([request.auth.uid]);
+      allow update: if isEmailVerified() && isValidId(householdId) && isValidHousehold(incoming())
+        && existing().members.hasAny([request.auth.uid])
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    // TRANSACTIONS collection: everyday tracking records
+    match /transactions/{transactionId} {
+      allow get: if isEmailVerified() && userHouseholdId() == resource.data.householdId;
+      allow list: if isEmailVerified() && userHouseholdId() == resource.data.householdId;
+      allow create: if isEmailVerified() && isValidId(transactionId) && isValidTransaction(incoming()) 
+        && incoming().householdId == userHouseholdId();
+      allow update: if isEmailVerified() && isValidId(transactionId) && isValidTransaction(incoming())
+        && incoming().householdId == userHouseholdId()
+        && existing().householdId == userHouseholdId()
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if isEmailVerified() && isValidId(transactionId) && existing().householdId == userHouseholdId();
+    }
+
+    // GOALS collection: targeted trip, house, or retirement plans
+    match /goals/{goalId} {
+      allow get: if isEmailVerified() && userHouseholdId() == resource.data.householdId;
+      allow list: if isEmailVerified() && userHouseholdId() == resource.data.householdId;
+      allow create: if isEmailVerified() && isValidId(goalId) && isValidGoal(incoming()) 
+        && incoming().householdId == userHouseholdId();
+      allow update: if isEmailVerified() && isValidId(goalId) && isValidGoal(incoming())
+        && incoming().householdId == userHouseholdId()
+        && existing().householdId == userHouseholdId()
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if isEmailVerified() && isValidId(goalId) && existing().householdId == userHouseholdId();
+    }
+
+    // INVESTMENTS collection: investment compounding forecasts
+    match /investments/{investmentId} {
+      allow get: if isEmailVerified() && userHouseholdId() == resource.data.householdId;
+      allow list: if isEmailVerified() && userHouseholdId() == resource.data.householdId;
+      allow create: if isEmailVerified() && isValidId(investmentId) && isValidInvestment(incoming()) 
+        && incoming().householdId == userHouseholdId();
+      allow update: if isEmailVerified() && isValidId(investmentId) && isValidInvestment(incoming())
+        && incoming().householdId == userHouseholdId()
+        && existing().householdId == userHouseholdId()
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if isEmailVerified() && isValidId(investmentId) && existing().householdId == userHouseholdId();
+    }
+  }
+}
